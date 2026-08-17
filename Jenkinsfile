@@ -5,13 +5,7 @@ pipeline {
         choice(
             name: 'ACTION',
             choices: ['install', 'upgrade', 'rollback'],
-            description: 'Select the Helm operation to perform'
-        )
-
-        string(
-            name: 'IMAGE_TAG',
-            defaultValue: '1.0',
-            description: 'Docker image tag to deploy'
+            description: 'Select the Helm operation'
         )
 
         string(
@@ -22,25 +16,89 @@ pipeline {
     }
 
     environment {
-        RELEASE_NAME = 'firstapp'
-        CHART_PATH   = '.'
-        NAMESPACE    = 'default'
+        AWS_REGION     = 'us-east-1'
+        AWS_ACCOUNT_ID = '953289341362'
+        ECR_REPO       = 'test-project1'
+        ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_IMAGE      = "${ECR_REGISTRY}/${ECR_REPO}"
+
+        RELEASE_NAME   = 'firstapp'
+        NAMESPACE      = 'default'
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo 'Checking out Helm chart from GitHub...'
+                echo 'Checking out source code from GitHub...'
+            }
+        }
+
+        stage('Docker Build') {
+            when {
+                expression {
+                    params.ACTION != 'rollback'
+                }
+            }
+
+            steps {
+                sh '''
+                    echo "===== Docker Build ====="
+
+                    docker build \
+                      -t ${ECR_IMAGE}:${BUILD_NUMBER} .
+                '''
+            }
+        }
+
+        stage('ECR Login') {
+            when {
+                expression {
+                    params.ACTION != 'rollback'
+                }
+            }
+
+            steps {
+                sh '''
+                    echo "===== ECR Login ====="
+
+                    aws ecr get-login-password \
+                      --region ${AWS_REGION} | \
+                    docker login \
+                      --username AWS \
+                      --password-stdin ${ECR_REGISTRY}
+                '''
+            }
+        }
+
+        stage('Push Image to ECR') {
+            when {
+                expression {
+                    params.ACTION != 'rollback'
+                }
+            }
+
+            steps {
+                sh '''
+                    echo "===== Push Image to ECR ====="
+
+                    docker push ${ECR_IMAGE}:${BUILD_NUMBER}
+                '''
             }
         }
 
         stage('Validate Helm Chart') {
             steps {
                 sh '''
-                    helm lint ${CHART_PATH}
-                    helm template ${RELEASE_NAME} ${CHART_PATH} \
-                        --set image.tag=${IMAGE_TAG}
+                    echo "===== Helm Lint ====="
+
+                    helm lint .
+
+                    echo "===== Helm Template ====="
+
+                    helm template ${RELEASE_NAME} . \
+                      --set image.repository=${ECR_IMAGE} \
+                      --set image.tag=${BUILD_NUMBER}
                 '''
             }
         }
@@ -51,11 +109,16 @@ pipeline {
                     params.ACTION == 'install'
                 }
             }
+
             steps {
                 sh '''
-                    helm install ${RELEASE_NAME} ${CHART_PATH} \
-                        --namespace ${NAMESPACE} \
-                        --set image.tag=${IMAGE_TAG}
+                    echo "===== Helm Install ====="
+
+                    helm install ${RELEASE_NAME} . \
+                      --namespace ${NAMESPACE} \
+                      --set image.repository=${ECR_IMAGE} \
+                      --set image.tag=${BUILD_NUMBER} \
+                      --wait
                 '''
             }
         }
@@ -66,12 +129,16 @@ pipeline {
                     params.ACTION == 'upgrade'
                 }
             }
+
             steps {
                 sh '''
-                    helm upgrade ${RELEASE_NAME} ${CHART_PATH} \
-                        --namespace ${NAMESPACE} \
-                        --set image.tag=${IMAGE_TAG} \
-                        --wait
+                    echo "===== Helm Upgrade ====="
+
+                    helm upgrade ${RELEASE_NAME} . \
+                      --namespace ${NAMESPACE} \
+                      --set image.repository=${ECR_IMAGE} \
+                      --set image.tag=${BUILD_NUMBER} \
+                      --wait
                 '''
             }
         }
@@ -82,11 +149,14 @@ pipeline {
                     params.ACTION == 'rollback'
                 }
             }
+
             steps {
                 sh '''
+                    echo "===== Helm Rollback ====="
+
                     helm rollback ${RELEASE_NAME} ${ROLLBACK_REVISION} \
-                        --namespace ${NAMESPACE} \
-                        --wait
+                      --namespace ${NAMESPACE} \
+                      --wait
                 '''
             }
         }
@@ -94,17 +164,47 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 sh '''
-                    echo "===== Helm Release ====="
+                    echo "======================================"
+                    echo "       HELM RELEASE"
+                    echo "======================================"
+
                     helm list -n ${NAMESPACE}
 
-                    echo "===== Helm History ====="
-                    helm history ${RELEASE_NAME} -n ${NAMESPACE}
+                    echo "======================================"
+                    echo "       HELM HISTORY"
+                    echo "======================================"
 
-                    echo "===== Kubernetes Pods ====="
+                    helm history ${RELEASE_NAME} \
+                      -n ${NAMESPACE}
+
+                    echo "======================================"
+                    echo "       KUBERNETES DEPLOYMENT"
+                    echo "======================================"
+
+                    kubectl get deployment ${RELEASE_NAME} \
+                      -n ${NAMESPACE}
+
+                    echo "======================================"
+                    echo "       ROLLOUT STATUS"
+                    echo "======================================"
+
+                    kubectl rollout status \
+                      deployment/${RELEASE_NAME} \
+                      -n ${NAMESPACE} \
+                      --timeout=120s
+
+                    echo "======================================"
+                    echo "       KUBERNETES PODS"
+                    echo "======================================"
+
                     kubectl get pods -n ${NAMESPACE}
 
-                    echo "===== Kubernetes Service ====="
-                    kubectl get service ${RELEASE_NAME} -n ${NAMESPACE}
+                    echo "======================================"
+                    echo "       KUBERNETES SERVICE"
+                    echo "======================================"
+
+                    kubectl get service ${RELEASE_NAME} \
+                      -n ${NAMESPACE}
                 '''
             }
         }
@@ -112,15 +212,19 @@ pipeline {
 
     post {
         success {
-            echo '======================================'
-            echo 'HELM DEPLOYMENT SUCCESSFUL'
-            echo '======================================'
+            echo '''
+========================================
+   HELM + ECR PIPELINE SUCCESSFUL
+========================================
+'''
         }
 
         failure {
-            echo '======================================'
-            echo 'HELM DEPLOYMENT FAILED'
-            echo '======================================'
+            echo '''
+========================================
+   HELM + ECR PIPELINE FAILED
+========================================
+'''
         }
     }
 }

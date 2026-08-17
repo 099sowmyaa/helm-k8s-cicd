@@ -9,7 +9,8 @@ spec:
   selector:
     app: firstapp
   ports:
-    - port: {{ .Values.service.port }}
-      targetPort: 80
+    - port: 80
+      targetPort: 8080
       protocol: TCP
-      nodePort: {{ .Values.service.nodePort }}
+      nodePort: 30756
+  

@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: sowmyaprathik20/first
-  tag: "1.0"
+  repository: 953289341362.dkr.ecr.us-east-1.amazonaws.com/test-project1
+  tag: "latest"
   pullPolicy: IfNotPresent
 
 service:
