@@ -86,6 +86,29 @@ pipeline {
                 '''
             }
         }
+        stage('Create ECR Pull Secret') {
+            when {
+                expression {
+                    params.ACTION != 'rollback'
+                }
+            }
+
+            steps {
+                sh '''
+                    echo "===== Creating/Refreshing ECR Pull Secret ====="
+
+                    ECR_PASSWORD=$(aws ecr get-login-password \
+                      --region ${AWS_REGION})
+
+                    kubectl create secret docker-registry ecr-registry-secret \
+                      --namespace ${NAMESPACE} \
+                      --docker-server=${ECR_REGISTRY} \
+                      --docker-username=AWS \
+                      --docker-password="${ECR_PASSWORD}" \
+                      --dry-run=client -o yaml | kubectl apply -f -
+                '''
+            }
+        }
 
         stage('Validate Helm Chart') {
             steps {

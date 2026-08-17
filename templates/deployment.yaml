@@ -14,6 +14,8 @@ spec:
       labels:
         app: firstapp
     spec:
+      imagePullSecrets:
+        - name: ecr-registry-secret
       containers:
         - name: first
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
