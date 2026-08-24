@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firstapp-blue
+  labels:
+    app: firstapp
+    version: blue
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+
+  selector:
+    matchLabels:
+      app: firstapp
+      version: blue
+
+  template:
+    metadata:
+      labels:
+        app: firstapp
+        version: blue
+
+    spec:
+      imagePullSecrets:
+        - name: ecr-registry-secret
+
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: firstapp
+          effect: NoSchedule
+
+      containers:
+        - name: first
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          ports:
+            - containerPort: 8080
