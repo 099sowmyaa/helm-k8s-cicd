@@ -9,7 +9,7 @@ spec:
 
   selector:
     app: firstapp
-    version: blue
+    version: green
 
   ports:
     - port: 80
