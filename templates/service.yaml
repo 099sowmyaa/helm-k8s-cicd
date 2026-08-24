@@ -6,11 +6,13 @@ metadata:
     app: firstapp
 spec:
   type: {{ .Values.service.type }}
+
   selector:
     app: firstapp
+    version: blue
+
   ports:
     - port: 80
       targetPort: 8080
       protocol: TCP
       nodePort: 30756
-  
