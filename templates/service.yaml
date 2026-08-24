@@ -9,7 +9,7 @@ spec:
 
   selector:
     app: firstapp
-    version: green
+    version: {{ .Values.service.version }}
 
   ports:
     - port: 80

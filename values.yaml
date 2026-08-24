@@ -9,3 +9,5 @@ service:
   type: NodePort
   port: 80
   nodePort: 30756
+  version: green
+
